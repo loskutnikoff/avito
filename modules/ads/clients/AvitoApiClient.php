@@ -3,6 +3,7 @@
 namespace app\modules\ads\clients;
 
 use app\modules\ads\models\DealerClassifier;
+use app\modules\ads\models\Message;
 use Exception;
 use Yii;
 use yii\httpclient\Client;
@@ -164,20 +165,44 @@ class AvitoApiClient extends BaseApiClient
         }
     }
 
-    public function sendMessage(string $token, string $chatId, string $message): ?array
+    public function getMessagesData(string $token, int $userId, string $chatId): ?array
     {
         try {
-            $response = $this->httpClient->post($this->apiUrl . "/messenger/v3/chats/{$chatId}/messages")
+            $response = $this->httpClient->get($this->apiUrl . "/messenger/v3/accounts/{$userId}/chats/{$chatId}/messages")
+                ->setHeaders([
+                    'Authorization' => 'Bearer ' . $token,
+                ])
+                ->send();
+
+            if ($response->isOk && isset($response->data)) {
+                Yii::info("Данные чата {$chatId} получены", 'ads');
+
+                return $response->data;
+            }
+            Yii::error("Ошибка получения данных чата. HTTP: {$response->statusCode}, Response: {$response->content}", 'ads');
+
+            return null;
+        } catch (Exception $e) {
+            Yii::error("Ошибка при получении данных чата: " . $e->getMessage(), 'ads');
+
+            return null;
+        }
+    }
+
+    public function sendMessage(string $token, int $userId, string $externalChatId, string $message): ?array
+    {
+        try {
+            $response = $this->httpClient->post($this->apiUrl . "/messenger/v1/accounts/{$userId}/chats/{$externalChatId}/messages")
                 ->setHeaders([
                     'Authorization' => 'Bearer ' . $token,
                     'Content-Type' => 'application/json',
                 ])
                 ->setFormat(Client::FORMAT_JSON)
-                ->setData(['text' => $message])
+                ->setData(['message' => ['text' => $message], 'type' => Message::MESSAGE_TYPE_TEXT])
                 ->send();
 
             if ($response->isOk) {
-                Yii::info("Сообщение отправлено в чат {$chatId}", 'ads');
+                Yii::info("Сообщение отправлено в чат {$externalChatId}", 'ads');
 
                 return $response->data;
             }

@@ -30,7 +30,9 @@ modules/ads/
 ├── dto/                                 # DTO
 │   ├── AvitoWebhookDto                  # Парсинг вебхуков Avito
 │   ├── AutoruWebhookDto                 # Парсинг вебхуков Auto.ru
-│   └── LeadDataDto                      # DTO данных для лида
+│   ├── LeadDataDto                      # DTO данных для лида
+│   ├── MessageContentDto                # DTO данных контента сообщения
+│   └── MessageDto                       # DTO данных сообщения
 ├── exceptions/                          # Объекты передачи данных
 │   ├── AdvertCreationException          # Exception для объявления
 │   ├── ChatCreationException            # Exception для чата

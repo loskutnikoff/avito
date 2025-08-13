@@ -36,14 +36,21 @@ class AvitoPlatform extends BasePlatform
         try {
             $dto = new AvitoWebhookDto($webhookData);
 
-            if (!$dto->chat_id) {
-                $this->logError("Отсутствует chat_id в webhook данных");
+            if ($dto->isSystemMessage()) {
+                $this->logInfo("Системное сообщение, обработка хука отменена");
+
                 return false;
             }
 
-            $chatData = $this->getChatDataWithAuth((int)$dto->user_id, $dto->chat_id, $classifier);
-            $userName = $this->getUserNameFromChatData($chatData, $dto->user_id);
-            $authorName = $this->getUserNameFromChatData($chatData, $dto->author_id);
+            if (!$dto->chat_id) {
+                $this->logError("Отсутствует chat_id в webhook данных");
+
+                return false;
+            }
+
+            $chatData = $this->getChatData((int)$dto->user_id, $dto->chat_id, $classifier);
+            $userName = $this->getUserNameFromChatData($chatData, $dto->user_id) ?? (Yii::t('app', 'Продавец') . ' ' . $dto->user_id);
+            $authorName = $this->getUserNameFromChatData($chatData, $dto->author_id) ?? (Yii::t('app', 'Покупатель') . ' ' . $dto->author_id);
 
             $advert = null;
             if ($dto->item_id) {
@@ -57,8 +64,8 @@ class AvitoPlatform extends BasePlatform
             $chatDataForProcessing = [
                 'user_id' => $dto->user_id,
                 'author_id' => $dto->author_id,
-                'user_name' => $userName ?? (Yii::t('app', 'Продавец') . ' ' . $dto->user_id),
-                'author_name' => $authorName ?? (Yii::t('app', 'Покупатель') . ' ' . $dto->author_id),
+                'user_name' => $userName,
+                'author_name' => $authorName,
             ];
             $chat = $this->webhookLogic->processChat($dto->chat_id, $advert, $chatDataForProcessing);
 
@@ -66,16 +73,19 @@ class AvitoPlatform extends BasePlatform
                 $messageData = [
                     'chat_id' => $chat->id,
                     'external_message_id' => $dto->message_id,
-                    'sender_type' => $dto->isUserMessage() ? 'user' : 'dealer',
+                    'sender_type' => $dto->getSenderType(),
                     'sender_id' => (string)$dto->author_id,
-                    'sender_name' => $dto->isUserMessage()
-                        ? ($authorName ?? (Yii::t('app', 'Покупатель') . ' ' . $dto->author_id))
-                        : ($userName ?? (Yii::t('app', 'Продавец') . ' ' . $dto->user_id)),
-                    'message_type' => Message::MESSAGE_TYPE_TEXT,
+                    'sender_name' => $dto->isUserMessage() ? $authorName : $userName,
+                    'message_type' => $dto->message_type,
                     'content' => $dto->text ?? '',
                 ];
                 $this->webhookLogic->processMessage($messageData);
             }
+// сильно нагрузит, вынес в @see ClassifierController
+//            $messagesData = $this->getMessagesData((int)$dto->user_id, $dto->chat_id, $classifier);
+//            if ($messagesData) {
+//                $this->webhookLogic->syncMessages($messagesData, $chat->id);
+//            }
 
             if ($dto->isUserMessage()) {
                 $leadData = new LeadDataDto([
@@ -83,9 +93,9 @@ class AvitoPlatform extends BasePlatform
                     'dealer_id' => $classifier->dealer_id,
                     'source_type' => DealerClassifier::TYPE_AVITO,
                     'user_id' => $dto->user_id,
-                    'user_name' => $userName ?? (Yii::t('app', 'Продавец') . ' ' . $dto->user_id),
+                    'user_name' => $userName,
                     'author_id' => $dto->author_id,
-                    'author_name' => $authorName ?? (Yii::t('app', 'Покупатель') . ' ' . $dto->author_id),
+                    'author_name' => $authorName,
                     'message' => $dto->text ?? '',
                     'advert_title' => $chatData['context']['value']['title'] ?? null,
                     'item_id' => $dto->item_id,
@@ -106,14 +116,14 @@ class AvitoPlatform extends BasePlatform
             }
 
             return true;
-
         } catch (Exception $e) {
             $this->logError("Ошибка обработки webhook", $e);
+
             return false;
         }
     }
 
-    public function sendMessage(string $chatId, string $message, int $dealerId): bool
+    public function sendMessage(int $userId, string $externalChatId, string $message, int $dealerId): bool
     {
         try {
             $token = $this->getTokenForDealer($dealerId);
@@ -121,11 +131,12 @@ class AvitoPlatform extends BasePlatform
                 return false;
             }
 
-            $result = $this->apiClient->sendMessage($token, $chatId, $message);
-            return $result !== null;
+            $result = $this->apiClient->sendMessage($token, $userId, $externalChatId, $message);
 
+            return $result !== null;
         } catch (Exception $e) {
             $this->logError("Ошибка отправки сообщения", $e);
+
             return false;
         }
     }
@@ -139,9 +150,9 @@ class AvitoPlatform extends BasePlatform
             }
 
             return $this->apiClient->subscribeWebhook($token, $webhookUrl);
-
         } catch (Exception $e) {
             $this->logError("Ошибка регистрации webhook", $e);
+
             return false;
         }
     }
@@ -155,9 +166,9 @@ class AvitoPlatform extends BasePlatform
             }
 
             return $this->apiClient->getWebhooks($token);
-
         } catch (Exception $e) {
             $this->logError("Ошибка получения webhook", $e);
+
             return null;
         }
     }
@@ -171,14 +182,14 @@ class AvitoPlatform extends BasePlatform
             }
 
             return $this->apiClient->unsubscribeWebhook($token, $webhookUrl);
-
         } catch (Exception $e) {
             $this->logError("Ошибка удаления webhook", $e);
+
             return false;
         }
     }
 
-    private function getChatDataWithAuth(int $userId, string $chatId, DealerClassifier $classifier): ?array
+    private function getChatData(int $userId, string $chatId, DealerClassifier $classifier): ?array
     {
         try {
             $token = $this->getTokenForDealer($classifier->dealer_id);
@@ -187,9 +198,25 @@ class AvitoPlatform extends BasePlatform
             }
 
             return $this->apiClient->getChatData($token, $userId, $chatId);
-
         } catch (Exception $e) {
             $this->logError("Ошибка при получении данных чата", $e);
+
+            return null;
+        }
+    }
+
+    public function getMessagesData(int $userId, string $chatId, DealerClassifier $classifier): ?array
+    {
+        try {
+            $token = $this->getTokenForDealer($classifier->dealer_id);
+            if (!$token) {
+                return null;
+            }
+
+            return $this->apiClient->getMessagesData($token, $userId, $chatId);
+        } catch (Exception $e) {
+            $this->logError("Ошибка при получении данных чата", $e);
+
             return null;
         }
     }

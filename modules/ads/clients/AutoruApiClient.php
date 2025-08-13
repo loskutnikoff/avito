@@ -41,7 +41,7 @@ class AutoruApiClient extends BaseApiClient
         return false;
     }
 
-    public function sendMessage(string $token, string $chatId, string $message): ?array
+    public function sendMessage(string $token, int $userId, string $chatId, string $message): ?array
     {
         Yii::warning("Auto.ru отправка сообщений не реализована", 'ads');
         return null;

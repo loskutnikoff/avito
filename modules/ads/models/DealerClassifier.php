@@ -25,6 +25,7 @@ use yii\db\ActiveRecord;
  * @property int|null $updated_by
  *
  * @property Dealer $dealer
+ * @property Advert[] $adverts
  */
 class DealerClassifier extends ActiveRecord
 {
@@ -99,6 +100,11 @@ class DealerClassifier extends ActiveRecord
     public function getDealer()
     {
         return $this->hasOne(Dealer::class, ['id' => 'dealer_id']);
+    }
+
+    public function getAdverts()
+    {
+        return $this->hasMany(Advert::class, ['classifier_id' => 'id']);
     }
 
     public static function getTypeList(): array

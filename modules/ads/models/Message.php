@@ -35,6 +35,9 @@ class Message extends ActiveRecord
     public const MESSAGE_TYPE_IMAGE = 'image';
     public const MESSAGE_TYPE_FILE = 'file';
 
+    public const TYPE_DIRECTION_IN = 'in';
+    public const TYPE_DIRECTION_OUT = 'out';
+
     public static function tableName(): string
     {
         return 'dsf_ads_message';

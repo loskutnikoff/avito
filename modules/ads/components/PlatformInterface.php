@@ -8,7 +8,7 @@ interface PlatformInterface
 {
     public function handleWebhook(array $webhookData, DealerClassifier $classifier): bool;
 
-    public function sendMessage(string $chatId, string $message, int $dealerId): bool;
+    public function sendMessage(int $userId, string $externalChatId, string $message, int $dealerId): bool;
 
     public function registerWebhook(string $webhookUrl, int $classifierId): bool;
 

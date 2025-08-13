@@ -2,14 +2,35 @@
 
 namespace app\modules\ads\commands;
 
+use app\modules\ads\components\AvitoPlatform;
+use app\modules\ads\helpers\WebhookLogic;
+use app\modules\ads\models\Advert;
+use app\modules\ads\models\Chat;
 use app\modules\ads\models\DealerClassifier;
 use app\modules\ads\helpers\WebhookManager;
+use app\modules\ads\services\AdvertService;
+use app\modules\ads\services\ChatService;
+use app\modules\ads\services\InterestService;
+use app\modules\ads\services\MessageService;
 use Exception;
 use yii\console\Controller;
 use yii\helpers\Console;
 
 class ClassifierController extends Controller
 {
+    public WebhookLogic $webhookLogic;
+
+    public function init()
+    {
+        parent::init();
+        $this->webhookLogic = new WebhookLogic(
+            new AdvertService(),
+            new ChatService(),
+            new MessageService(),
+            new InterestService()
+        );
+    }
+
     public function actionCheckWebhooks()
     {
         $this->stdout("Проверка и регистрация вебхуков для классификаторов\n", Console::FG_GREEN);
@@ -282,6 +303,59 @@ class ClassifierController extends Controller
         }
     }
 
+    public function actionSyncMessages()
+    {
+        /** @var DealerClassifier $classifier */
+        $classifierList = DealerClassifier::find()
+            ->where(['is_active' => true, 'type' => DealerClassifier::TYPE_AVITO])
+            ->all();
+
+        if (!$classifierList) {
+            $this->stdout("Классификаторы не найдены\n", Console::FG_RED);
+            return;
+        }
+
+        $totalChatsProcessed = 0;
+        $totalMessagesSynced = 0;
+        $errors = 0;
+
+        /** @var DealerClassifier $classifier */
+        foreach ($classifierList as $classifier) {
+            $this->stdout("Обработка классификатора ID {$classifier->id}...\n", Console::FG_CYAN);
+            $platform = $classifier->createPlatform();
+            if (!($platform instanceof AvitoPlatform)) {
+                $this->stdout("Ошибка: Платформа не является AvitoPlatform\n", Console::FG_RED);
+                $errors++;
+                continue;
+            }
+            /** @var Advert $advert */
+            foreach ((array)$classifier->adverts as $advert) {
+                /** @var Chat $chat */
+                foreach ((array)$advert->chats as $chat) {
+                    try {
+                        $messagesData = $platform->getMessagesData($chat->external_user_id, $chat->external_chat_id, $classifier);
+                        if ($messagesData) {
+                            $this->webhookLogic->syncMessages($messagesData, $chat->id);
+                            $totalMessagesSynced += count($messagesData['messages'] ?? []);
+                            $totalChatsProcessed++;
+                            $this->stdout("Синхронизировано сообщений для чата ID {$chat->id}: " . count($messagesData['messages'] ?? []) . "\n", Console::FG_GREEN);
+                        } else {
+                            $this->stdout("Нет данных о сообщений для чата ID {$chat->id}\n", Console::FG_YELLOW);
+                        }
+                    } catch (Exception $e) {
+                        $this->stdout("Ошибка при синхронизации чата ID {$chat->id}: {$e->getMessage()}\n", Console::FG_RED);
+                        $errors++;
+                    }
+                }
+            }
+            $this->stdout("\nИтого:\n", Console::FG_BLUE);
+            $this->stdout("- Обработано чатов: {$totalChatsProcessed}\n", Console::FG_GREEN);
+            $this->stdout("- Синхронизировано сообщений: {$totalMessagesSynced}\n", Console::FG_GREEN);
+            $this->stdout("- Ошибок: {$errors}\n", Console::FG_RED);
+            $this->stdout("- Всего классификаторов: " . count($classifierList) . "\n", Console::FG_BLUE);
+        }
+    }
+
     public function actionHelp()
     {
         $this->stdout("Доступные команды:\n", Console::FG_GREEN);
@@ -290,6 +364,7 @@ class ClassifierController extends Controller
         $this->stdout("  validate-credentials   - Проверка валидности учетных данных\n", Console::FG_CYAN);
         $this->stdout("  generate-webhook-token - Принудительная генерация нового webhook токена\n", Console::FG_CYAN);
         $this->stdout("  status                 - Показать статус всех классификаторов\n", Console::FG_CYAN);
+        $this->stdout("  sync-messages          - Синхронизация сообщений\n", Console::FG_CYAN);
         $this->stdout("  help                   - Показать эту справку\n", Console::FG_CYAN);
 
         $this->stdout("\nПримеры использования:\n", Console::FG_GREEN);
@@ -298,6 +373,7 @@ class ClassifierController extends Controller
         $this->stdout("  php yii ads/classifier/validate-credentials\n", Console::FG_YELLOW);
         $this->stdout("  php yii ads/classifier/generate-webhook-token <classifier_id>\n", Console::FG_YELLOW);
         $this->stdout("  php yii ads/classifier/status\n", Console::FG_YELLOW);
+        $this->stdout("  php yii ads/classifier/sync-messages\n", Console::FG_YELLOW);
     }
 
     private function getActiveClassifiers(): ?array

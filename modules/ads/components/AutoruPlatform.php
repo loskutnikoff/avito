@@ -34,7 +34,7 @@ class AutoruPlatform extends BasePlatform
         return false;
     }
 
-    public function sendMessage(string $chatId, string $message, int $dealerId): bool
+    public function sendMessage(int $userId, string $externalChatId, string $message, int $dealerId): bool
     {
         return false;
     }

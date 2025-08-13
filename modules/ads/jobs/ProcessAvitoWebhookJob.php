@@ -3,6 +3,7 @@
 namespace app\modules\ads\jobs;
 
 use app\components\queue\AbstractJob;
+use app\helpers\Helper;
 use app\modules\ads\models\DealerClassifier;
 use Exception;
 use Yii;
@@ -18,6 +19,7 @@ class ProcessAvitoWebhookJob extends AbstractJob
         parent::execute($queue);
 
         try {
+            Helper::setSystemConsoleUser();
             Yii::info("Обработка вебхука Avito в фоне", 'ads');
 
             $query = DealerClassifier::find()->where(['type' => DealerClassifier::TYPE_AVITO, 'is_active' => true]);

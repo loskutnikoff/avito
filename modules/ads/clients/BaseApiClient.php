@@ -26,5 +26,5 @@ abstract class BaseApiClient
 
     abstract public function unsubscribeWebhook(string $token, string $webhookUrl): bool;
 
-    abstract public function sendMessage(string $token, string $chatId, string $message): ?array;
+    //abstract public function sendMessage(string $token, int $userId, string $externalChatId, string $message): ?array;
 }

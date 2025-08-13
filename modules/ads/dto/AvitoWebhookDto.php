@@ -2,6 +2,7 @@
 
 namespace app\modules\ads\dto;
 
+use app\modules\ads\models\Message;
 use InvalidArgumentException;
 use yii\base\BaseObject;
 use app\modules\ads\validators\WebhookValidator;
@@ -76,36 +77,40 @@ class AvitoWebhookDto extends BaseObject
         }
     }
 
-    public function isNewChat(): bool
-    {
-        return $this->type === 'chat';
-    }
-
     public function isNewMessage(): bool
     {
         return $this->type === 'message';
     }
 
-    public function isMessageStatus(): bool
+    public function isSystemMessage(): bool
     {
-        return $this->type === 'message_status';
-    }
-
-    public function isChatStatus(): bool
-    {
-        return $this->type === 'chat_status';
+        return $this->message_type == Message::SENDER_TYPE_SYSTEM;
     }
 
     public function isUserMessage(): bool
     {
-        // Если author_id == user_id, то это сообщение от создателя объявления (дилера)
-        // Если author_id != user_id, то это сообщение от покупателя (потенциального лида)
         return $this->author_id !== $this->user_id;
     }
 
     public function isDealerMessage(): bool
     {
-        // Если author_id == user_id, то это сообщение от дилера (продавца)
         return $this->author_id === $this->user_id;
+    }
+
+    public function getSenderType(): ?string
+    {
+        if ($this->isSystemMessage()) {
+            return Message::SENDER_TYPE_SYSTEM;
+        }
+
+        if ($this->isUserMessage()) {
+            return Message::SENDER_TYPE_USER;
+        }
+
+        if ($this->isDealerMessage()) {
+            return Message::SENDER_TYPE_DEALER;
+        }
+
+        return null;
     }
 }

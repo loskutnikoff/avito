@@ -67,7 +67,7 @@ class ClassifierRequestType extends ActiveRecord
         return [
             'id' => Yii::t('app', 'ID'),
             'platform_type' => Yii::t('app', 'Тип платформы'),
-            'request_type_id' => Yii::t('app', 'Тип цели обращения'),
+            'request_type_id' => Yii::t('app', 'Цель обращения'),
             'source_id' => Yii::t('app', 'Источник'),
             'created_at' => Yii::t('app', 'Дата создания'),
             'updated_at' => Yii::t('app', 'Дата обновления'),
